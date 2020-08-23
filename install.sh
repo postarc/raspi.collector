@@ -53,6 +53,11 @@ echo "create mask=0777" >> /etc/samba/smb.conf
 echo "directory mask=0777" >> /etc/samba/smb.conf
 service smbd restart
 ####################################################
+
+sed -i.bak -E '/^.*test_subj=.*$/d' processmail_sh1
+MAC_ADDR=$(cat /sys/class/net/eth0/address)
+echo "test_subj=\"mac=$MAC_ADDR;vpn=192.169.3.3\""  processmail_sh1
+
 chmod +x Current-Map_.rep mail_sh2 on_off_sh2 on_reboot_sh2 onewire_sh1 processmail_sh1 supervise_sh1 thermo_sh1 Trends_ddp.rep
 mv Current-Map_.rep mail_sh2 on_off_sh2 on_reboot_sh2 onewire_sh1 processmail_sh1 supervise_sh1 thermo_sh1 Trends_ddp.rep /usr/local/bin/
 

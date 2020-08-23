@@ -73,5 +73,5 @@ mv Current-Map_.rep mail_sh2 on_off_sh2 on_reboot_sh2 onewire_sh1 processmail_sh
 sudo /usr/local/bin/on_reboot_sh2
 cd ..
 rm -rf raspi.collector
-echo -e "${GREEM}All Done!${NC}"
+echo -e "${GREEM}All Done! ${NC}"
 

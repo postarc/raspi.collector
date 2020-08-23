@@ -1,0 +1,18 @@
+#!/bin/bash
+
+# MAIL_TO=$(timeout -s SIGINT 1s mosquitto_sub -t Settings/Supervise/mailAddress)
+# my_ip_addr=$(hostname -I)
+# 
+# parent_dir="/home/pi/share"
+# archive_dir=$parent_dir/archive
+# 
+# if [ -z "$MAIL_TO" ]; then
+# 	exit
+# fi
+# device=$1
+# data=$(timeout -s SIGINT 1s mosquitto_sub -v -t +/$device/+)
+# if [ ! -z  "$data" ]; then
+# 	echo "$data" | mail -s "data for $device from collector: $my_ip_addr"  $MAIL_TO
+# else
+# 	echo "" | mail -s "no data for $device from collector: $my_ip_addr"  $MAIL_TO
+# fi 

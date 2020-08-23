@@ -54,7 +54,7 @@ echo "directory mask=0777" >> /etc/samba/smb.conf
 service smbd restart
 ####################################################
 chmod +x Current-Map_.rep mail_sh2 on_off_sh2 on_reboot_sh2 onewire_sh1 processmail_sh1 supervise_sh1 thermo_sh1 Trends_ddp.rep
-cp Current-Map_.rep mail_sh2 on_off_sh2 on_reboot_sh2 onewire_sh1 processmail_sh1 supervise_sh1 thermo_sh1 Trends_ddp.rep /usr/local/bin/
+mv Current-Map_.rep mail_sh2 on_off_sh2 on_reboot_sh2 onewire_sh1 processmail_sh1 supervise_sh1 thermo_sh1 Trends_ddp.rep /usr/local/bin/
 
 sudo /usr/local/bin/on_reboot_sh2
 

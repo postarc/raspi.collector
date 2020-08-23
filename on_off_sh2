@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# device=$1
+# on_duration=$2
+# 
+# ((on_duration+=0))
+# if ((on_duration>30)); then on_duration=30; fi
+# if ((on_duration< 2)); then on_duration=2; fi
+# 
+# mosquitto_pub -t Command/Supervise/W1_plung/$device -m on
+# sleep $on_duration
+# mosquitto_pub -t Command/Supervise/W1_plung/$device -m off 

@@ -12,6 +12,7 @@ RED='\033[0;31m'
 GREEN="\033[0;32m"
 NC='\033[0m'
 MAG='\e[1;35m'
+cd raspi.collector
 echo -e "${CYAN}Prepare Installation...${NC}"
 sudo apt update
 sudo apt dist-upgrade

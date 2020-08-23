@@ -1,0 +1,83 @@
+#!/bin/bash
+# Graph report 1
+
+
+rep_name=$0
+rep_dir=${rep_name%/*}
+
+rep_name=${rep_name##*/}
+rep_name=${rep_name%_*}
+
+beg_date=$1
+end_date=$2
+position=$3
+
+MAIL_TO=$(timeout -s SIGINT 1s mosquitto_sub -t Settings/Supervise/mailAddress)
+my_ip_addr=$(hostname -I)
+name=$(timeout -s SIGINT 1s mosquitto_sub -t Settings/CurrentGroup/Name)
+datetime=$(date +%d.%m.%y-%H:%M:%S)
+
+gnuplot <<script_here
+reset session
+set terminal pdf noenhanced size 30cm, 21cm
+set output "${rep_dir}/${rep_name}.pdf"
+set style data lines
+set xlabel "Date\nTime"
+set timefmt "%d.%m.%y-%H:%M:%S"
+set xdata time
+
+set format x "%d.%m.%y\n%H:%M:%S"
+set grid
+set key left
+
+set yrange [ : ]
+set xrange [ "${beg_date}-00:00:00":"${end_date}-23:59:59" ]
+
+plot_title="Position "."$position"."   From: "."$beg_date"." To: "."$end_date"."\n${name}(${my_ip_addr}) ${datetime}"
+set pointsize 0
+
+plot_cmd=""
+is_report=0
+plungs_name="Thermo_plung Humi_plung W1_plung"
+do for [plung in plungs_name] {
+	file_path="/home/pi/share/archive/".plung."/"
+	files_mask=file_path."$position"."_*"
+	files=system("ls 2\>/dev/null ".files_mask." | sed -E 's#^/.+/(.+)\$#\\\1#'")
+	
+	temp_cmd="plot"
+	do for [file in files] {
+		temp_cmd=temp_cmd." '".file_path.file."' using 1:2 with linespoints title '".file[strstrt(file,"_")+1:]."',"
+	}
+	
+	if (temp_cmd eq "plot") {
+		print "No data at position "."$position"." for ".plung
+	} else {	
+		plot_cmd=plot_cmd."set title '".plot_title." (".plung.")';".temp_cmd[1:strlen(temp_cmd)-1].";"
+		is_report=1
+	}	
+}
+
+if (is_report==0) {
+	set output
+	system("rm -f ${rep_dir}/${rep_name}.pdf")
+	exit 2
+}
+
+@plot_cmd
+
+exit GPVAL_ERRNO
+
+script_here
+
+exit_status=$?
+
+if [ -z "$MAIL_TO" ]; then
+	exit
+fi
+
+if [ -e  "${rep_dir}/${rep_name}.pdf" ] && [ $exit_status -eq 0 ] ; then
+	echo "reports for position #$position, from: $beg_date to: $end_date" | mail -s "report: $rep_name from collector: $my_ip_addr" -A "${rep_dir}/${rep_name}.pdf"  $MAIL_TO
+else
+	echo "No data for position #$position, from: $beg_date to: $end_date" | mail -s "report: $rep_name from collector: $my_ip_addr"  $MAIL_TO
+fi
+ 

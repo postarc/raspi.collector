@@ -1,0 +1,286 @@
+#!/bin/bash
+
+
+rep_name=$0
+rep_dir=$(dirname "$0")
+
+rep_name=${rep_name##*/}
+rep_name=${rep_name%_*}
+
+beg_date=$1
+end_date=$2
+position=$3
+
+MAIL_TO=$(timeout -s SIGINT 1s mosquitto_sub -t Settings/Supervise/mailAddress)
+my_ip_addr=$(hostname -I)
+
+parent_dir="/home/pi/share"
+archive_dir=$parent_dir/archive
+work_dir=${rep_dir}/tmp/${rep_name}
+
+rm -rf $work_dir
+mkdir -p $work_dir
+
+declare -a plungs_name=("Thermo_plung" "Humi_plung" "W1_plung")
+declare -a Thermo_plung_sens_id=("T0" "T1" "T2" "T3")
+declare -a Humi_plung_sens_id=("H0" "T0")
+declare -a W1_plung_sens_id=("T0")
+declare -a active_positions=()
+
+rows=$(timeout -s SIGINT 1s mosquitto_sub -t Settings/CurrentGroup/Rows)
+cols=$(timeout -s SIGINT 1s mosquitto_sub -t Settings/CurrentGroup/Cols)
+name=$(timeout -s SIGINT 1s mosquitto_sub -t Settings/CurrentGroup/Name)
+datetime=$(date +%d.%m.%y-%H:%M:%S)
+
+{
+	typeset bind_list=$(timeout -s SIGINT 1s mosquitto_sub -v -t Settings/CurrentGroup/Binding/+)
+	typeset bind_array=(${bind_list// /=})
+	bind_array=(${bind_array[*]//:/})
+	typeset var x
+
+	for var in ${bind_array[*]}
+	do
+		x=${var%%=*}
+		x=${x##*/}
+		active_positions+=($x)
+		active_devices+=(${var##*=})
+	done
+}
+
+declare -a positions=()
+declare -a dev_by_pos=()
+for i in $(seq 1 $((cols*rows))) 
+do
+	positions+=(0)
+	dev_by_pos+=("''")
+	
+	echo -n $i >> $work_dir/plan0
+	if (( i % cols == 0 )); then
+		echo >> $work_dir/plan0
+	else
+		echo -n ' ' >> $work_dir/plan0
+	fi			
+done
+
+j=0
+for i in ${active_positions[*]}
+do
+	positions[$((i-1))]=1
+	dev_by_pos[$((i-1))]=${active_devices[$j]}
+	(( j++ ))
+done
+
+for i in $(seq 1 $((cols*rows))) 
+do
+	echo -n ${dev_by_pos[$((i-1))]} >> $work_dir/devs_plan0
+	if (( i % cols == 0 )); then
+		echo >> $work_dir/devs_plan0
+	else
+		echo -n ' ' >> $work_dir/devs_plan0
+	fi			
+done
+
+delim="\n"
+if (( rows>5  && cols<=3 )); then
+	delim=", "
+fi
+
+for plung in ${plungs_name[*]}
+do
+	typeset sens_id=${plung}_sens_id[*]
+	
+	for i in $(seq 1 $((cols*rows))) 
+	do
+		for s in ${!sens_id}
+		do			
+			if (( positions[i-1]==1 )); then
+				if [ -e ${archive_dir}/${plung}/${i}_${s} ]; then
+					read date_time value < <(tail $archive_dir/$plung/${i}_${s} | tr -d '\000' | tail -n1)
+					if [ -z $date_time ] || [ -z $value ]; then
+						date_time="''"
+						value=-100
+					fi
+					echo -n "$value" >> $work_dir/${plung}_$s
+					echo -n "$date_time" >> $work_dir/${plung}_${s}_date_time
+				else
+					echo -n "-100" >> $work_dir/${plung}_$s
+					echo -n "''" >> $work_dir/${plung}_${s}_date_time
+				fi
+			else
+					echo -n "-200" >> $work_dir/${plung}_$s
+					echo -n "''" >> $work_dir/${plung}_${s}_date_time				
+			fi
+			
+			if (( i % cols == 0 )); then
+				echo >> $work_dir/${plung}_$s
+				echo >> $work_dir/${plung}_${s}_date_time				
+			else
+				echo -n ' ' >> $work_dir/${plung}_$s
+				echo -n ' ' >> $work_dir/${plung}_${s}_date_time				
+			fi			
+		done
+	done
+done
+
+gnuplot <<script_here
+reset session
+set terminal pdf noenhanced size 30cm, 21cm
+set output "${rep_dir}/${rep_name}.pdf"
+
+set tic scale 0
+
+# Color runs from white to green
+# set palette rgbformula 2,2,-7
+set palette maxcolor 7
+set palette defined (-3 "skyblue",-2 "white", -1 "grey", 0 "dark-green", 1 "green", 2 "yellow", 3 "red")
+set cbrange [-3:3]
+unset cbtics
+unset colorbox
+
+unset xtics 
+unset ytics 
+
+unset mxtics 
+unset mytics 
+
+set xrange [-0.5:*]
+set yrange [-0.5:*]
+
+set view map
+#set timestamp top
+
+set autoscale xfix
+set autoscale yfix
+set tics scale 0,0.001
+set xtics 1
+set ytics 1
+set mxtics 2
+set mytics 2
+set format x ""
+set format y ""
+set grid front mxtics mytics lw 0.1 lt -1 lc rgb 'black'
+
+titles='"Low level T0" "Level_T1" "Level T2" "Upper level T3"'
+
+set title offset 0,-1
+
+	set multiplot layout 2,2 title "Map of temperature/humidity \n${name}(${my_ip_addr}) ${datetime}" font ",12"\
+    margin screen 0.05, 0.95, 0.05, 0.95 spacing screen 0.04
+
+#	_F=system("2>nul type flags")	
+	_plan=system("tac ${work_dir}/plan0 2> /dev/null")
+	_devs_plan=system("tac ${work_dir}/devs_plan0 2> /dev/null")
+	_now=strptime("%d.%m.%y-%H:%M:%S","$datetime")
+	
+	i=0
+	do for [k=0:3] {
+		_T=system("tac ${work_dir}/Thermo_plung_T".k." 2> /dev/null")
+		len_T=words(_T)
+		
+		_Th=system("tac ${work_dir}/Humi_plung_T".k." 2> /dev/null")
+		len_Th=words(_Th)
+		
+		_H=system("tac ${work_dir}/Humi_plung_H".k." 2> /dev/null")
+		
+		_Tw1=system("tac ${work_dir}/W1_plung_T".k." 2> /dev/null")
+		
+		if (len_T>=len_Th) { len=len_T }
+		else { len=len_Th }
+		
+		_date_time_T=system("tac ${work_dir}/Thermo_plung_T".k."_date_time 2> /dev/null")
+		_date_time_H=system("tac ${work_dir}/Humi_plung_H".k."_date_time 2> /dev/null")
+		_date_time_Tw1=system("tac ${work_dir}/W1_plung_T".k."_date_time 2> /dev/null")
+		
+		_status=""
+		_TT=""
+		do for [i=1:len:1] {
+			_stat_tmp=""
+			
+			if (word(_T,i) ne "")  { temp_T =word(_T,i)} else {temp_T="-200"}
+			if (word(_Th,i) ne "") { temp_Th=word(_Th,i)} else {temp_Th="-200"}
+			if (word(_Tw1,i) ne "") { temp_Tw1=word(_Tw1,i)} else {temp_Tw1="-200"}
+#			if (word(_H,i) ne "")  { _HH[i] =word(_H,i)+0} else {_HH[i]=-200}
+#			if (word(_F,i) ne "")  { _FF[i] =word(_F,i)+0} else {_FF[i]=-200}
+		
+			if ( temp_T+0<=-100 && (temp_Th+0>-100 || temp_Tw1+0>-100) ) { 
+				if (temp_Tw1+0>-100) {
+					_stat_tmp="w1"
+					_TT=_TT.temp_Tw1." " 
+				}
+				else {
+					_stat_tmp="\316\251"
+					_TT=_TT.temp_Th." " 				
+				}
+			} 
+			else {
+				_TT=_TT.temp_T." "
+			}
+			
+			if ( (word(_date_time_T,i) ne "" && _now - strptime("%d.%m.%y-%H:%M:%S",word(_date_time_T,i)) > 28800.0) ||\
+                 (word(_date_time_H,i) ne "" && _now - strptime("%d.%m.%y-%H:%M:%S",word(_date_time_H,i)) > 28800.0) ||\
+                 (word(_date_time_Tw1,i) ne "" && _now - strptime("%d.%m.%y-%H:%M:%S",word(_date_time_Tw1,i)) > 28800.0) ){
+				_stat_tmp=_stat_tmp." "."\342\221\247"
+			}	
+			
+			_status=_status."'"._stat_tmp."'"." "
+		}
+
+#		# батарейка
+#		do for [i=1:len:1] {
+#			if ((int(_FF[i]) >> 14) < 3) {_status[i]=_status[i]."\360\237\224\213 "}
+#		}
+#	
+		_palitra=""
+		do for [i=1:len:1] {
+			_pal_tmp=""
+			if (word(_TT,i) ne "") {_T_tmp=word(_TT,i)+0} else {_T_tmp=-200}
+			if (word(_H,i) ne "") {_H_tmp=word(_H,i)+0} else {_H_tmp=-200}
+		
+			if (_T_tmp==-200 || _H_tmp==-200) {_pal_tmp=" -2"}
+			if (_T_tmp==-100 || _H_tmp==-100) {_pal_tmp=" -1"}
+			if (_T_tmp >-100 || _H_tmp > 10)  {_pal_tmp=" 0"}
+			if (_T_tmp > -10 || _H_tmp > 35)  {_pal_tmp=" 1"} 
+			if (_T_tmp >  35 || _H_tmp > 45)  {_pal_tmp=" 2"} 
+			if (_T_tmp >  45 || _H_tmp > 60)  {_pal_tmp=" 3"} 
+			
+			if (strstrt(word(_status,i),"\342\221\247")>0) {_pal_tmp=" -1"}
+		
+			_palitra=_palitra._pal_tmp
+#			# молния - датчик есть в слове состояния штанги (flags), но данных нет
+#			if (_FF[i] > -100 && _palitra[i]==-1) { 
+#				_palitra[i]=-3 
+#				if (int(_FF[i]) & (1<<k)) { _status[i]=_status[i]."\342\232\241 " }
+#			}
+#	
+#			# крест - никто не видит штангу (нет строк в файле rssi, содержащих ее мак)
+#			if (_palitra[i]==-1 && _FF[i] == -100) {
+#				_my_mac=word(_plan,i)
+#				_rssi=system("2>nul type data\\rssi")
+#				if (strstrt(_rssi, _my_mac)==0) { _status[i]=_status[i]."\342\225\263 " }			
+#			}
+		}
+						
+		set title word(titles,k+1)
+		set encoding utf8
+		plot '${work_dir}/plan0' matrix using 1:2:(( (\$1+\$2)==0 ? i=1 : i=i+1 ), (word(_palitra,i)+0) ) with image title '', \
+		     '' matrix using 1:2:(( (\$1+\$2)==0 ? i=1 : i=i+1 ), word(_plan,i) ) with labels tc "blue" font ",8" offset first 0.4,0.4 title '',\
+		     '' matrix using 1:2:(( (\$1+\$2)==0 ? i=1 : i=i+1 ), word(_devs_plan,i)[9:]) with labels font ",8" offset first -0.3,0.4 title '',\
+		     '' matrix using 1:2:(( (\$1+\$2)==0 ? i=1 : i=i+1 ), word(_status,i)) with labels font ",12" offset first 0,-0.4 title '',\
+		     '' matrix using 1:2:(( (\$1+\$2)==0 ? i=1 : i=i+1 ), (((word(_TT,i))+0) > -100 ? word(_TT,i)."°C" : "").(((word(_H,i) ne "") && ((word(_H,i)+0) > -100)) ? "$delim".word(_H,i)."%" : "") ) with labels offset first 0,0.15 title ''
+#		     '' matrix using 1:2:(( (\$1+\$2)==0 ? i=1 : i=i+1 ), ((word(_H,i) ne "") && ((word(_H,i)+0) > -100)) ? word(_H,i)."%" : "") with labels offset first 0,-0.1 title ''
+		unset encoding
+	}	
+	unset multiplot
+script_here
+exit_status=$?
+
+
+if [ -z "$MAIL_TO" ]; then
+	exit
+fi
+
+if [ -e  "${rep_dir}/${rep_name}.pdf"  ] && [ $exit_status -eq 0 ] ; then
+	echo "current map report" | mail -s "report: $rep_name from collector: $my_ip_addr" -A "${rep_dir}/${rep_name}.pdf"  $MAIL_TO
+else
+	echo "No data for current map report" | mail -s "report: $rep_name from collector: $my_ip_addr"  $MAIL_TO
+fi

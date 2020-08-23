@@ -1,0 +1,332 @@
+#!/bin/bash
+
+#allowed_devices="00:A0:50:19:99:21"
+RSSI_MIN=-97
+
+parse_char ()
+{
+    typeset expvar=${1//:/}
+    typeset -i flags="0x$4$3" j=0 i=0
+	typeset flags_hex="$4$3"
+	typeset cur_plung="${plungs_name[$2]}"
+	typeset sens_id=${cur_plung}_sens_id[*]
+	typeset val_per_sens=${cur_plung}_val_per_sens[*]
+
+    echo $flags_hex > $parent_dir/$cur_plung/${expvar}_flags
+	mosquitto_pub -r -t $cur_plung/$1/flags -m $flags_hex
+    if (( flags & 0x2000)); then
+	
+        if (( (flags & 0xC000) == 0 )); then
+			mosquitto_pub -r -t Common/$1/batt_low -m 1
+		else
+			mosquitto_pub -r -t Common/$1/batt_low -m 0
+		fi
+
+        (( flags &= 0x00ff ))
+        if (( flags == 0 )); then
+			mosquitto_pub -r -t $cur_plung/$1/No_sensors -m 1
+			typeset s
+			for s in ${!sens_id}
+			do
+				mosquitto_pub -r -n -t $cur_plung/$1/$s
+				rm -f $parent_dir/$cur_plung/${expvar}_$s
+			done
+		else
+			mosquitto_pub -r -n -t $cur_plung/$1/No_sensors	
+			for ((i=0; i < 8; i++ ))
+			do
+				typeset -i n1=0 n2=0 
+				typeset value
+				typeset z
+				typeset -i k=${!val_per_sens:$i:1}
+
+				if (( flags & 1 )); then
+					for (( z=0; z<k; z++ )) 
+					do
+						(( n1=j*2 + 5 ))
+						(( n2=j*2 + 6 ))
+						value="0x${!n2}${!n1}"
+						if (( value & 0x8000 )); then 
+							(( value += 0xffffffffffffff0000 ))
+						fi
+						value=$(printf "%.1f" $(bc -l <<< "$((value))/10"))
+
+						echo $value > $parent_dir/$cur_plung/${expvar}_${!sens_id:$j:1}
+						echo $(date +%d.%m.%y-%H:%M:%S) $value >> $archive_dir/$cur_plung/${arh_id}_${!sens_id:$j:1}
+						mosquitto_pub -r -t $cur_plung/$1/${!sens_id:$j:1} -m $value
+						(( j++ ))
+					done
+				else
+					for s in ${!sens_id:$j:$k}
+					do
+						mosquitto_pub -r -n -t $cur_plung/$1/$s
+						rm -f $parent_dir/$cur_plung/${expvar}_$s
+					done
+					(( j+=k ))
+				fi
+				(( flags >>= 1 ))
+			done
+		fi
+		return 0
+    fi
+    return 1
+}
+
+#-------------------------------------------------------
+get_char ()
+{
+    typeset expvar=${1//:/}
+    typeset -i j=0
+    typeset char
+    typeset ret=1
+	typeset char_uuid="${char_data_uids[$2]}"
+
+    while (( j++ < 10 ))
+    do
+		char=$(gatttool -b $1 --char-read -u $char_uuid 2>&1)
+		if [[ $? -eq 0 && "$char" =~ ^"handle:" ]]; then
+			if parse_char $1 $2 $(cut -c25- <<< "$char"); then
+				rm -f $parent_dir/"${plungs_name[$2]}"/${expvar}_error
+				mosquitto_pub -r -n -t "${plungs_name[$2]}"/$1/error
+				return 0
+			else
+				ret=3
+				echo "$1 data not valid #$j"
+				sleep 0.4
+				continue
+			fi
+		else
+			if [[  "$char" =~ "No attribute found" ]]; then
+				ret=2
+				break
+			fi
+			
+			echo "$1 try again #$j"
+			ret=1
+			sleep 1
+		fi
+    done
+
+	typeset cur_plung="${plungs_name[$2]}"
+	typeset sens_id=${cur_plung}_sens_id[*]
+
+	typeset s
+	for s in ${!sens_id}
+	do 
+		mosquitto_pub -r -n -t "${plungs_name[$2]}"/$1/$s
+		rm -f $parent_dir/"${plungs_name[$2]}"/${expvar}_$s
+	done
+
+    if (( $ret != 3 )); then
+		
+		mosquitto_pub -r -n -t "${plungs_name[$2]}"/$1/flags
+		rm -f $parent_dir/"${plungs_name[$2]}"/${expvar}_flags
+    fi
+
+    echo $ret > $parent_dir/"${plungs_name[$2]}"/${expvar}_error
+    mosquitto_pub -r -t "${plungs_name[$2]}"/$1/error -m $ret
+	
+    return $ret
+}
+
+
+#-------------------------------------------------------
+remove_dev_data ()
+{
+    typeset expvar=${1//:/}
+	typeset plung
+	typeset topic
+	
+	for plung in ${plungs_name[*]}
+	do
+		typeset IDs=${plung}_sens_id[*]
+		
+		for topic in ${!IDs}
+		do
+			mosquitto_pub -r -n -t $plung/$1/$topic
+			rm -f $parent_dir/$plung/${expvar}_$topic
+		done
+		
+		for topic in ${service_topics[*]}
+		do
+			mosquitto_pub -r -n -t $plung/$1/$topic
+			rm -f $parent_dir/$plung/${expvar}_$topic
+		done
+		
+		mosquitto_pub -r -n -t $plung/$1/No_sensors			
+	done
+	
+	for topic in ${common_topics[*]}
+	do
+		mosquitto_pub -r -n -t Common/$1/$topic
+		rm -f $parent_dir/Common/${expvar}_$topic
+	done
+}
+
+#########################################################
+
+me=$(basename -- "$0")
+exec > /dev/null
+
+#----defence from two instance of script running
+numof_script_pid=$(exec pidof -x $me)
+
+if [ $(wc -w <<< "$numof_script_pid") -ge 2 ]; then
+    exit 1
+fi
+#--------------------------------------------------
+
+
+parent_dir="/home/pi/share"
+archive_dir=$parent_dir/archive
+thermo_char_data="a059fd7f-7a23-42de-a27f-251e46fae6d4" 
+humi_char_data="221affa8-d075-44af-8ed6-3ab83d1f661a"
+si7021_char_data="2D80263B-AF4D-4BC2-B93B-A99648907428"
+
+declare -a char_data_uids=($thermo_char_data $humi_char_data $si7021_char_data)
+declare -a plungs_name=("Thermo_plung" "Humi_plung" "Si7021_plung")
+declare -a all_top_topics=("Common" "${plungs_name[*]}")
+declare -a common_topics=("rssi" "batt_low")
+declare -a service_topics=("error" "flags")
+
+declare -a Thermo_plung_sens_id=("T0" "T1" "T2" "T3")
+declare -a Thermo_plung_val_per_sens=(1 1 1 1)
+
+declare -a Humi_plung_sens_id=("H0" "T0")
+declare -a Humi_plung_val_per_sens=(2)
+
+declare -a Si7021_plung_sens_id=("H0" "T0")	
+declare -a Si7021_plung_val_per_sens=(2)
+
+#------create subdirs----------
+for top in ${all_top_topics[*]}
+do
+	mkdir -p $parent_dir/$top	
+	mkdir -p $archive_dir/$top	
+done
+
+hciconfig hci0 down
+killall hcitool 2>&1
+hciconfig hci0 up
+
+btmon > $parent_dir/temp_log &
+btmon_pid=$!
+
+
+{
+	typeset -i j=0
+	while (( j++ < 10 ))
+	do
+		dev_list=$(timeout -s SIGINT 10s hcitool lescan --passive 2>&1)
+		if [[ $dev_list =~ "error" ]]; then
+			if (( j==9 )) ; then
+				kill -s SIGINT $btmon_pid
+				exit
+			fi
+			hciconfig hci0 down
+			sleep 1
+			hciconfig hci0 up
+			sleep 1
+			continue
+		else
+			break
+		fi
+	done
+}
+kill -s SIGINT $btmon_pid
+
+dev_list=$(sed -n -E 's/(([0-9A-Fa-z]{2}[:-]){5}[0-9A-Fa-z]{2}) Therm/\1/p' <<< "$dev_list")
+
+#------- get RSSI block -------
+btmon_log=$(cat $parent_dir/temp_log)
+dev_array=$(sed -n -E 's/^.*Address: (([0-9A-Fa-z]{2}[:-]){5}[0-9A-Fa-z]{2}).*$/\1/p' <<< "$btmon_log")
+dev_array=(${dev_array//:/})
+rssi_array=($(sed -n -E 's/^.*RSSI: ([^ ]*) .*$/\1/p' <<< "$btmon_log"))
+
+#---------- filter out not allowed devices ----------------
+if [[ ! -z "$allowed_devices" ]] 
+then
+    for dev in $dev_list
+    do
+		grep -q $dev <<< "$allowed_devices" && allowed_list="${allowed_list} ${dev}"
+    done
+    dev_list=${allowed_list}
+fi
+
+#------------get address-to-position binding ----------------
+{
+	typeset bind_list=$(timeout -s SIGINT 1s mosquitto_sub -v -t Settings/CurrentGroup/Binding/+)
+	typeset bind_array=(${bind_list// /=})
+	bind_array=(${bind_array[*]//:/})
+	typeset var x
+
+	for var in ${bind_array[*]}
+	do
+		x=${var%%=*}
+		x=${x##*/}
+		declare bind_${var##*=}=$x
+	done
+}
+
+for dev in $dev_list
+do
+{
+    typeset expvar=${dev//:/}
+	typeset rssi=0
+	typeset -i i
+
+	typeset bind_ref=bind_${expvar}
+	if [ ! -z ${!bind_ref} ]; then
+		typeset arh_id=${!bind_ref}
+	else
+		typeset arh_id=$expvar
+	fi
+
+	for (( i=0; i<${#dev_array[*]}; i++ ))
+	do
+		if [ ${dev_array[$i]} = $expvar ]; then
+			rssi=${rssi_array[$i]}
+			if [ ${rssi:0:1} != "-" ]; then 
+				rssi=-150
+			fi
+		fi
+	done
+
+	if (( rssi > RSSI_MIN )); then
+		for (( i=0; i<${#char_data_uids[*]}; i++ ))
+		do
+			get_char $dev $i
+		done
+	else
+		remove_dev_data $dev
+		echo "device ${expvar} LOW RSSI (less then ${RSSI_MIN}), connection discarded"
+	fi
+	
+	mosquitto_pub -r -t Common/$dev/rssi -m $rssi
+	echo $rssi > $parent_dir/Common/${expvar}_rssi
+	echo $(date +%d.%m.%y-%H:%M:%S) $rssi >> $archive_dir/Common/${arh_id}_rssi
+} 
+done
+
+#-----delete not scanned devices' files ------------------
+dev_list=${dev_list//:/}
+typeset files=()
+for top in ${all_top_topics[*]}
+do
+	if  ls $parent_dir/$top/* 1> /dev/null 2>&1 ; then		
+		for file in $parent_dir/$top/*
+		do
+			fl=${file##*/}
+			files+=(${fl:0:12})
+		done
+	fi
+done
+
+files=$(tr '\n' ' ' <<< $(sort -u <<< $(tr ' ' '\n' <<< ${files[*]})))
+for fl_name in $files 
+do
+	grep -q $fl_name <<< $dev_list || {
+		typeset dev=${fl_name:0:2}:${fl_name:2:2}:${fl_name:4:2}:${fl_name:6:2}:${fl_name:8:2}:${fl_name:10:2}
+		remove_dev_data $dev
+	}
+done 

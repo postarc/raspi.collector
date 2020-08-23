@@ -1,0 +1,173 @@
+#!/bin/bash
+
+me=$(basename -- "$0")
+exec > /dev/null
+
+#----defence from two instance of script running
+numof_script_pid=$(exec pidof -x $me)
+
+if [ $(wc -w <<< "$numof_script_pid") -ge 2 ]; then
+    exit 1
+fi
+
+parent_dir="/home/pi/share"
+archive_dir=$parent_dir/archive
+
+tmp_dir=/usr/local/bin/tmp
+work_dir=/usr/local/bin
+w1_bus_dir="/sys/bus/w1/devices"
+
+#----------------------------------------------------------
+mosquitto_pub -r -n -t Settings/Supervise/firmwareData 
+if  ls $work_dir/*_sh[12] $work_dir/*.rep 1> /dev/null 2>&1 ; then		
+	for file in $work_dir/*_sh[12] $work_dir/*.rep
+	do	
+		versions=${file##*/}::$(date '+%d.%m.%Y %H:%M' -r $file)\;$versions
+	done
+	versions=${versions%;}  
+fi
+
+if [ ! -z "$versions" ]; then
+	mosquitto_pub -r -t Settings/Supervise/firmwareVer -m "$versions"
+else
+	mosquitto_pub -r -n -t Settings/Supervise/firmwareVer 
+fi
+
+#--------------- refresh data form devices ----------------------
+/usr/local/bin/thermo_sh1 &
+mosquitto_pub -r -t Settings/Supervise/onewireDriverRestart -m 1
+/usr/local/bin/onewire_sh1 &
+wait $!
+
+#----------------------------------------------------------
+while read topic value
+do
+	if [ "$topic" = "Settings/Supervise/pollingPeriod" ]; then
+		sudo sed -i.bak -E '/^.*thermo_sh1.*$/d' /etc/crontab
+		sudo echo "*/$value * * * *    pi sudo /usr/local/bin/thermo_sh1 &" >> /etc/crontab
+		
+		sudo sed -i.bak -E '/^.*onewire_sh1.*$/d' /etc/crontab
+		sudo echo "*/$value * * * *    pi sudo /usr/local/bin/onewire_sh1 &" >> /etc/crontab
+		
+		sudo sed -i.bak -E '/^.*@reboot.*$/d' /etc/crontab
+		sudo echo "@reboot pi sudo /usr/local/bin/on_reboot_sh2 &" >> /etc/crontab				
+	elif [ "$topic" = "Settings/Supervise/reportToEmail" ]; then
+		sudo sed -i.bak -E '/^.*Current-Map_\.rep.*$/d' /etc/crontab
+		if [ $value = 1 ]; then
+			sudo echo "05 15 * * *    pi sudo /usr/local/bin/Current-Map_.rep &" >> /etc/crontab
+		fi
+	elif [ "$topic" = "Settings/Supervise/mailAddress" ]; then
+		MAIL_TO=$value
+	elif [ "$topic" = "Settings/Supervise/clearArch" ] && [ $value = 1 ]; then
+		rm -rf $archive_dir
+		mosquitto_pub -r -t Settings/Supervise/clearArch -m 0					
+	elif [ "${topic%/*}" = "Settings/Supervise/reports" ]; then
+		echo $work_dir/"${topic##*/}.rep"
+		if [ -e $work_dir/"${topic##*/}.rep" ]; then
+			sudo $work_dir/"${topic##*/}.rep" $value &
+		fi
+	elif [ "$topic" = "Settings/Supervise/firmwareData" ] && [ ! -z "$value" ]; then
+		#mkdir -p $tmp_dir
+		#echo "$value" > $tmp_dir/scripts
+		#base64 -d $tmp_dir/scripts > $tmp_dir/scripts.zip || continue		
+		#unzip -o -P {ivk160871} $tmp_dir/scripts.zip -d $tmp_dir || continue
+		
+		if  ls $tmp_dir/*_sh2 1> /dev/null 2>&1 ; then		
+			sudo chmod a+x $tmp_dir/*_sh2 || continue
+			sudo rm -f $work_dir/*_sh2
+			mv $tmp_dir/*_sh2 $work_dir || continue
+		fi
+		
+				
+		if  ls $tmp_dir/*.rep 1> /dev/null 2>&1 ; then		
+			sudo chmod a+x $tmp_dir/*.rep || continue
+			sudo rm -f $work_dir/*.rep
+			mv $tmp_dir/*.rep $work_dir || continue
+		fi		
+		
+		if [ -e $tmp_dir/thermo_sh1 ]; then
+			sudo chmod a+x $tmp_dir/thermo_sh1 || continue
+			mv $tmp_dir/thermo_sh1 $work_dir/thermo_sh1 || continue
+		fi
+		
+		if [ -e $tmp_dir/onewire_sh1 ]; then
+			sudo chmod a+x $tmp_dir/onewire_sh1 || continue
+			mv $tmp_dir/onewire_sh1 $work_dir/onewire_sh1 || continue
+			mosquitto_pub -r -t Settings/Supervise/onewireDriverRestart -m 1
+		fi
+		
+		if [ -e $tmp_dir/processmail_sh1 ]; then
+			sudo chmod a+x $tmp_dir/processmail_sh1 || continue
+			mv $tmp_dir/processmail_sh1 $work_dir/processmail_sh1 || continue
+			sudo sed -i.bak -E '/^.*processmail_sh1.*$/d' /etc/crontab
+			sudo echo "*/5 * * * *    pi sudo /usr/local/bin/processmail_sh1 &" >> /etc/crontab
+		fi
+
+		if [ -e $tmp_dir/supervise_sh1 ]; then
+			sudo chmod a+x $tmp_dir/supervise_sh1 || continue
+			mv $tmp_dir/supervise_sh1 $work_dir/supervise_sh1 || continue
+			pkill -P $$
+			break
+		fi				
+	elif [ "${topic%/*}" = "Settings/Supervise/Action/Cron" ] && [ ! -z "$value" ]; then
+			actions=${value//'!^'/$'\n'}
+			device="${topic##*/}"
+			
+			sudo sed -i.bak -E '/^.*_sh2 '"$device"' .*$/d' /etc/crontab
+			while read act 
+			do
+				if [ ! -z "$act" ]; then 
+					cron_val="$(cut -d ' ' -f1-5 <<< $act)"
+					script_val="$(cut -d ' ' -f6 <<< $act)"
+					script_params="$(cut -d ' ' -f7- <<< $act)"
+					sudo echo "$cron_val pi sudo $work_dir/${script_val}_sh2 $device $script_params &" >> /etc/crontab
+				fi
+			done <<< "$actions"
+	elif [ "${topic%/*}" = "Command/Supervise/W1_plung" ] && [ ! -z "$value" ]; then
+		if [[ "${topic##*/}" =~ 3aw ]]; then
+			action="$value"
+			w1_device="${topic##*/}"
+			expvar=$w1_device
+			w1_device="${w1_device//w/-}"
+			key_id="${w1_device: -1}"
+			w1_device="${w1_device:0:-1}"
+			if [ -e "${w1_bus_dir}/${w1_device}/output" ] && [ -e "${w1_bus_dir}/${w1_device}/state" ]; then
+				err_count=3
+				for (( j=0; j<err_count; j++ )) # try 3 times if value is empty
+				do
+					data=$(xxd "${w1_bus_dir}/${w1_device}/state")
+					if [ -z "$data" ]; then 
+						sleep 0.3
+						continue
+					fi
+					
+					data=0x$(sed -n -E 's/^.+:\s+(.+)\s+.*$/\1/p' <<< $data)
+					mask=$((8>>2*key_id))
+					(( data &= 0xA ))
+					if [ "$action" = "on" ]; then
+						if (( data!=0xA && (data&mask)!=0 )); then
+							echo -e '\x0' | sudo dd of="${w1_bus_dir}/${w1_device}/output" bs=1 count=1 # on all
+						elif (( data==0xA )); then
+							echo -e '\x'$((key_id+1)) | sudo dd of="${w1_bus_dir}/${w1_device}/output" bs=1 count=1 # on one
+						fi				
+					elif [ "$action" = "off" ]; then
+						if (( data!=0 && (data&mask)==0 )); then
+							echo -e '\x3' | sudo dd of="${w1_bus_dir}/${w1_device}/output" bs=1 count=1 # off all
+						elif (( data==0 )); then
+							echo -e '\x'$(((key_id^1)+1)) | sudo dd of="${w1_bus_dir}/${w1_device}/output" bs=1 count=1 # on one
+						fi
+					fi
+					
+					$work_dir/onewire_sh1 ds2413 &
+					break
+				done
+			fi
+		fi
+	fi 	
+done < <(exec mosquitto_sub -v -t Settings/Supervise/# -t Command/Supervise/#)
+
+echo restart
+exec $work_dir/supervise_sh1 &
+
+
+ 

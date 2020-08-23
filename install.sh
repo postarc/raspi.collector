@@ -43,7 +43,7 @@ echo 'AuthMethod=LOGIN' >> /etc/ssmtp/ssmtp.conf
 echo -e "AuthUser=$MAIL_ADDR" >> /etc/ssmtp/ssmtp.conf
 echo -n -e "${YELLOW}Input mail password:${NC}"
 read PASSWD
-echo -e "AuthPass=$PASSWD" > /etc/ssmtp/ssmtp.conf    #a27TLxmqGdqgJ7N           
+echo -e "AuthPass=$PASSWD" >> /etc/ssmtp/ssmtp.conf    #a27TLxmqGdqgJ7N           
 echo 'FromLineOverride=NO' >> /etc/ssmtp/ssmtp.conf
 ##################################################
 #Create /etc/ssmtp/revaliases

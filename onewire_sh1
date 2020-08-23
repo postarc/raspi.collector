@@ -1,0 +1,186 @@
+#!/bin/bash
+
+# remove_dev_data ()
+# {
+#     typeset expvar=${1//-/w}
+# 	typeset plung
+# 	typeset topic
+# 	
+# 	for plung in ${plungs_name[*]}
+# 	do
+# 		typeset IDs=${plung}_sens_id[*]
+# 		
+# 		for topic in ${!IDs}
+# 		do
+# 			mosquitto_pub -r -n -t $plung/$expvar/$topic
+# 			rm -f $parent_dir/$plung/${expvar}_$topic
+# 		done
+# 		
+# 		for topic in ${service_topics[*]}
+# 		do
+# 			mosquitto_pub -r -n -t $plung/$expvar/$topic
+# 			rm -f $parent_dir/$plung/${expvar}_$topic
+# 		done		
+# 	done
+# 	
+# 	for topic in ${common_topics[*]}
+# 	do
+# 		mosquitto_pub -r -n -t Common/$expvar/$topic
+# 		rm -f $parent_dir/Common/${expvar}_$topic
+# 	done
+# }
+# 
+# #########################################################
+# 
+# me=$(basename -- "$0")
+# run_only_for="$1"
+# exec > /dev/null
+# 
+# #----defence from two instance of script running
+# numof_script_pid=$(exec pidof -x $me)
+# 
+# if [ $(wc -w <<< "$numof_script_pid") -ge 2 ]; then
+#     exit 1
+# fi
+# #--------------------------------------------------
+# 
+# onewireDriverRestart=$(timeout -s SIGINT 1s mosquitto_sub -t Settings/Supervise/onewireDriverRestart)
+# if (( onewireDriverRestart==1 )) ; then
+# 	mosquitto_pub -r -n -t Settings/Supervise/onewireDriverRestart 
+# 	sudo modprobe -r w1-gpio-cl 
+# 	# 1-wire ds1820 gpio=4 bpu=parasite power
+# 	# 1-wire ds2413 gpio=17
+# 	sudo modprobe w1-gpio-cl m1="gdt:4,bpu" m2="gdt:17" 1> /dev/nul 2>&1 || exit 1
+# 	sleep 5
+# fi
+# 
+# w1_bus_dir="/sys/bus/w1/devices"
+# parent_dir="/home/pi/share"
+# archive_dir=$parent_dir/archive
+# 
+# declare -a plungs_name=("W1_plung")
+# declare -a all_top_topics=("${plungs_name[*]}")
+# declare -a common_topics=()
+# declare -a service_topics=()
+# 
+# declare -a W1_plung_sens_id=("T0" "KA" "KB")
+# declare -a W1_plung_val_per_sens=(1 1 1)
+# 
+# #------create subdirs----------
+# for top in ${all_top_topics[*]}
+# do
+# 	mkdir -p $parent_dir/$top	
+# 	mkdir -p $archive_dir/$top	
+# done
+# 
+# dev_list=($(basename -a $(ls -d $w1_bus_dir/*-* 2> /dev/null) 2> /dev/null))
+# 
+# #------------get address-to-position binding ----------------
+# {
+# 	typeset bind_list=$(timeout -s SIGINT 1s mosquitto_sub -v -t Settings/CurrentGroup/Binding/+)
+# 	typeset bind_array=(${bind_list// /=})
+# 	bind_array=(${bind_array[*]//:/})
+# 	typeset var x
+# 
+# 	for var in ${bind_array[*]}
+# 	do	
+# 		x=${var%%=*}
+# 		x=${x##*/}
+# 		declare bind_${var##*=}=$x
+# 	done
+# }
+# 
+# for dev in ${dev_list[*]}
+# do
+#     typeset expvar=${dev//-/w}
+# 	
+# 	typeset bind_ref=bind_${expvar}
+# 	if [ ! -z ${!bind_ref} ]; then
+# 		typeset arh_id=${!bind_ref}
+# 	else
+# 		typeset arh_id=$expvar
+# 	fi
+# 
+# 	typeset cur_plung="W1_plung"
+# 	
+# 	# ds18S20
+# 	if [[ "$expvar" =~ 10w && -z "$run_only_for" ]]; then
+# 		typeset sens_id="T0"
+# 		
+# 		if [ -e "${w1_bus_dir}/${dev}/w1_slave" ] ; then
+# 			err_count=3
+# 			for (( j=0; j<err_count; j++ )) # try 3 times if value is suspicious
+# 			do
+# 				typeset data=$(cat "${w1_bus_dir}/${dev}/w1_slave")
+# 				if grep -q 'YES' <<< $data ; then
+# 					value=$(sed -n -E 's/.+t=(.+)/\1/p' <<< $data)
+# 					if (( value==85000 || value > 125000 || value < -55000 )) ; then
+# 						continue
+# 					else 
+# 						break
+# 					fi
+# 				fi
+# 			done
+# 			
+# 			if (( j<err_count || value==85000 )); then
+# 				value=$(printf "%.1f" $(bc -l <<< "$((value))/1000"))
+# 				echo $value > $parent_dir/$cur_plung/${expvar}_${sens_id}
+# 				echo $(date +%d.%m.%y-%H:%M:%S) $value >> $archive_dir/$cur_plung/${arh_id}_${sens_id}
+# 				mosquitto_pub -r -t $cur_plung/$expvar/${sens_id} -m $value			
+# 			else
+# 				mosquitto_pub -r -n -t $cur_plung/$expvar/${sens_id}
+# 				rm -f $parent_dir/$cur_plung/${expvar}_${sens_id}		
+# 			fi
+# 		else 
+# 			mosquitto_pub -r -n -t $cur_plung/$expvar/${sens_id}
+# 			rm -f $parent_dir/$cur_plung/${expvar}_${sens_id}		
+# 		fi
+# 		continue
+# 	fi
+# 	
+# 	# ds2413
+# 	if [[ "$expvar" =~ 3aw && ( -z "$run_only_for" || "$run_only_for" = ds2413 ) ]]; then
+# 		typeset sens_id=("KA" "KB")
+# 		
+# 		if [ -e "${w1_bus_dir}/${dev}/state" ] ; then
+# 			typeset data=0x$(xxd "${w1_bus_dir}/${dev}/state" | sed -n -E 's/^.+:\s+(.+)\s+.*$/\1/p')
+# 			for (( i=(${#sens_id[*]})-1; i>=0; i-- ))
+# 			do
+# 				value=$((data & 3))
+# 				echo $value > $parent_dir/$cur_plung/${expvar}${i}_${sens_id[$i]}
+# 				echo $(date +%d.%m.%y-%H:%M:%S) $value >> $archive_dir/$cur_plung/${arh_id}_${sens_id[$i]}
+# 				mosquitto_pub -r -t $cur_plung/${expvar}${i}/${sens_id[$i]} -m $value			
+# 				(( data>>=2 ))
+# 			done
+# 		else 
+# 			for (( i=0; i<${#sens_id[*]}; i++ ))
+# 			do
+# 				mosquitto_pub -r -n -t $cur_plung/${expvar}${i}/${sens_id[$i]}
+# 				rm -f $parent_dir/$cur_plung/${expvar}${i}_${sens_id[$i]}		
+# 			done
+# 		fi
+# 		continue
+# 	fi
+# 	
+# done
+# 
+# #-----delete not scanned devices' files ------------------
+# typeset files=()
+# for top in ${all_top_topics[*]}
+# do
+# 	if  ls $parent_dir/$top/* 1> /dev/null 2>&1 ; then		
+# 		for file in $parent_dir/$top/*
+# 		do
+# 			fl=${file##*/}
+# 			fl=${fl//w/-}
+# 			files+=(${fl%_*})
+# 		done
+# 	fi
+# done
+# 
+# files=$(tr '\n' ' ' <<< $(sort -u <<< $(tr ' ' '\n' <<< ${files[*]})))
+# 
+# for fl_name in $files 
+# do
+# 	grep -q ${fl_name:0:15} <<< ${dev_list[*]} || remove_dev_data $fl_name
+# done 

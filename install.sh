@@ -42,6 +42,7 @@ echo -e "pi:raspberry_pi@bk.ru" >> /etc/ssmtp/revaliases
 echo "Input your workgroup name:"
 read WORKGROUP_N
 sed -i.bak -E '/^.*workgroup =.*$/d' /etc/samba/smb.conf
+
 echo "workgroup = $WORKGROUP_N" >> /etc/samba/smb.conf
 echo "[share_pi]" >> /etc/samba/smb.conf
 echo "comment=Raspberry Pi Share" >> /etc/samba/smb.conf
@@ -55,10 +56,9 @@ service smbd restart
 ####################################################
 
 MAC_ADDR=$(cat /sys/class/net/eth0/address)
-sed -i 's/.*test_subj=.*/test_subj=\\"mac=$MAC_ADDR;vpn=192.169.3.3\\"/' processmail_sh1
+sed -i "s/.*test_subj=.*/test_subj=\"mac=${MAC_ADDR};vpn=192.169.3.3\"/" processmail_sh1
 
 
-echo "test_subj=\"mac=$MAC_ADDR;vpn=192.169.3.3\""  processmail_sh1
 
 chmod +x Current-Map_.rep mail_sh2 on_off_sh2 on_reboot_sh2 onewire_sh1 processmail_sh1 supervise_sh1 thermo_sh1 Trends_ddp.rep
 mv Current-Map_.rep mail_sh2 on_off_sh2 on_reboot_sh2 onewire_sh1 processmail_sh1 supervise_sh1 thermo_sh1 Trends_ddp.rep /usr/local/bin/

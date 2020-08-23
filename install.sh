@@ -41,9 +41,8 @@ echo -e "pi:raspberry_pi@bk.ru" >> /etc/ssmtp/revaliases
 
 echo "Input your workgroup name:"
 read WORKGROUP_N
-sed -i.bak -E '/^.*workgroup =.*$/d' /etc/samba/smb.conf
+sed -i "s/.*workgroup =.*/workgroup = ${WORKGROUP_N}/" /etc/samba/smb.conf
 
-echo "workgroup = $WORKGROUP_N" >> /etc/samba/smb.conf
 echo "[share_pi]" >> /etc/samba/smb.conf
 echo "comment=Raspberry Pi Share" >> /etc/samba/smb.conf
 echo "path=/home/pi/share" >> /etc/samba/smb.conf

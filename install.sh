@@ -11,6 +11,14 @@ sudo apt-get install gnuplot
 sudo apt-get install mailutils
 sudo apt-get install ssmtp
 sudo nano /etc/ssmtp/ssmtp.conf
+sudo apt-get install samba samba-common-bin
+sudo apt-get install build-essential bc git
+sudo apt install raspberrypi-kernel
+sudo apt install raspberrypi-kernel-headers
+git clone https://github.com/pstolarz/w1-gpio-cl.git
+cd w1-gpio-cl
+make
+sudo make install
 
 ###############################################
 #Create /etc/ssmtp/ssmtp.conf

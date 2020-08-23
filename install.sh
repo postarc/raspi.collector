@@ -30,6 +30,7 @@ git clone https://github.com/pstolarz/w1-gpio-cl.git
 cd w1-gpio-cl
 make
 sudo make install
+cd ..
 ###############################################
 #Create /etc/ssmtp/ssmtp.conf
 echo -e "${CYAN}Creating configuration...${NC}"

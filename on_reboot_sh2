@@ -1,0 +1,6 @@
+#!/bin/bash
+
+sudo sed -i.bak -E '/^.*supervise_sh1.*$/d' /etc/rc.local
+
+sleep 30
+sudo /usr/local/bin/supervise_sh1 &

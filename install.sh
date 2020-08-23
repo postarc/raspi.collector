@@ -51,6 +51,8 @@ echo "writeable=Yes" >> /etc/samba/smb.conf
 echo "guest ok =Yes" >> /etc/samba/smb.conf
 echo "create mask=0777" >> /etc/samba/smb.conf
 echo "directory mask=0777" >> /etc/samba/smb.conf
+service smbd restart
 
+sudo /usr/local/bin/on_reboot_sh2
 
 

@@ -1,0 +1,145 @@
+#!/bin/bash
+exec > /dev/null 
+
+me=$(basename --"$0")
+work_dir=$(dirname "$0")
+
+
+my_eth0_mac=$(cat /sys/class/net/eth0/address)
+my_eth0_mac=${my_eth0_mac//[:-]/} # delete all ':' and '-'
+my_eth0_mac=${my_eth0_mac^^}   # to uppercase
+
+
+test_subj="mac=dc:a6:32:7d:22:61;vpn=192.169.3.3"
+
+last_id=$(curl 2>&1 -s --insecure \
+    --url "imaps://imap.mail.ru" \
+    --user "raspberry_pi@bk.ru:a27TLxmqGdqgJ7N" \
+    -X "EXAMINE INBOX" | sed -n -E 's/^\* ([0-9]+) EXISTS\s*$/\1/p')
+
+echo "Email last UID = $last_id"
+
+if (( last_id > 0 )); then
+
+    saved_last_id=$(cat ${work_dir}/last_id 2>/dev/null)
+    echo "Previous last UID = ${saved_last_id:=0}"
+
+    if (( saved_last_id <  last_id )); then
+        echo "$last_id" > ${work_dir}/last_id
+        echo processing...
+    else
+        echo goodby
+        exit;
+    fi 
+
+    body=$(curl 2>&1 -s --insecure  --verbose \
+	--url "imaps://imap.mail.ru/Inbox;UID=$last_id" \
+	--user "raspberry_pi@bk.ru:a27TLxmqGdqgJ7N")
+
+    from_encoded=$(sed -n -E 's/^From: (.*)/\1/p'<<<"$body")
+    from=$(sed -n -E 's/^.* <(.*)>\s*$/\1/p'<<<"$from_encoded")
+    echo "Email from = $from"
+
+    [[ "$from" != 'postarc@mail.ru' ]] && exit
+
+    date_decoded=$(sed -n -E 's/^Date: (.*)/\1/p'<<<"$body")
+    echo "Email date and time = $date_decoded"
+
+    email_date=$(date -d "$date_decoded" +%s)
+    now=$(date +%s) 
+    
+    # if email time older than 15 minutes
+    if (( (now - email_date)/60 > 15 )); then
+        echo "Detected old mail"
+        exit
+    fi
+
+    subject_encoded=$(tr -d '\n' <<< "$body" | grep -Po '(?<=Subject: ).+?(?=[-\w]+:)')
+    subject=$(perl -CS -MEncode -ne 'print decode("MIME-Header",$_)'<<<"$subject_encoded")
+    subject=$(tr -d '\r' <<< "$subject") # delete carriage return
+    echo "Email subject = $subject"
+
+
+    eth0_mac=$(grep -o -i -P 'mac\s*=\s*[^\s]+?\s*(?=;|$)'<<<"$subject")
+    eth0_mac=${eth0_mac//[:-]/} # delete all ':' and '-'
+    eth0_mac=${eth0_mac^^}      # to uppercase
+    eth0_mac=${eth0_mac#*=}     # delete 'mac='
+    echo "Email mac = $eth0_mac"
+
+    route_add_host=$(grep -o -i -P 'host\s*=\s*[^\s]+?\s*(?=;|$)'<<<"$subject")
+    route_add_host=${route_add_host^^}      # to uppercase
+    route_add_host=${route_add_host#*=}     # delete 'host='
+    echo "Route_add_host = $route_add_host"
+
+    vpn_type=$(grep -o -i -P 'vpn\s*=\s*\w+?\s*(?=;|$)'<<<"$subject")
+    vpn_type=${vpn_type^^}      # to uppercase
+    vpn_type=${vpn_type#*=}     # delete 'vpn='
+    [[ "${vpn_type}" != 'PPTP' ]] && exit
+    echo "VPN type = ${vpn_type}"
+
+    if [ -n "$my_eth0_mac" ] && [ "$my_eth0_mac" = "$eth0_mac" ]; then
+        echo "input data for my MAC"
+    else 
+        echo "input data not for my MAC"
+        exit
+    fi
+
+    boundary=$(grep -Pzo 'Content-Type: multipart/\w+?;\s*boundary=".+?"'<<<"$body" | tr -d '\000')
+    boundary=$(grep -Po -m1 '(?<=boundary=").+?(?=")'<<<"$boundary")
+    boundary="--$boundary"
+    echo "MIME boundary = $boundary"
+
+    delim_str_nums=$(grep -n "\s*$boundary" <<<"$body"| egrep -o '[0-9]+:' | tr -d "\n" )
+    delim_str_nums=(${delim_str_nums//:/ })
+
+    # treat MIME sections one by one
+    typeset -i i k j=0 length=${#delim_str_nums[*]}
+    while (( j < length - 1 ))
+    do
+        i=${delim_str_nums[j]}+1
+        k=${delim_str_nums[j+1]}-1
+        section_data=$(sed -n "$i, $k p" <<< "$body")
+        if grep -q '^Content-Type: text/plain' <<< "$section_data"; then
+            if grep -q '^Content-Transfer-Encoding: base64' <<< "$section_data"; then
+
+                content=$(sed -n -E '/^\s*$/, $ p ' <<< "$section_data" |  base64 -d -i)
+                content=$(tr -d '\r' <<< "$content") # delete carriage return
+
+                vpn_config=$(sed -n -E '/^\s*\w+\s*=\s*\{\s*$/ , /^.*\}.*$/ p' <<< "$content")
+                peer_name=$(head -n1 <<< "$vpn_config" | sed -n -E 's/^\s*(\w+)\s*=\s*\{\s*$/\1/p')
+                vpn_config=$(egrep -v '(^\s*\w+\s*=\s*{\s*$|^.*}.*$)' <<< "$vpn_config")
+                
+                if [ -n "$vpn_config" ] && [ -n "$peer_name" ]; then
+                    echo "Peer_name file = $peer_name"
+                    if [ -d "/etc/ppp/peers/" ]; then    
+                        poff
+                        sleep 2
+                        vpn_config=$(sed -E 's/\xC2\xA0/ /g' <<< "$vpn_config") # replace all Non-breaking space with simple space
+                        echo "$vpn_config" > "/etc/ppp/peers/$peer_name"
+                        rm -f /var/log/ppp-connect-errors                        
+                        pon "$peer_name"
+                        sleep 5
+                        if [ -s /var/log/ppp-connect-errors ]; then
+                            cat /var/log/ppp-connect-errors | mail -s "$(cat /sys/class/net/eth0/address) error connection to peer"  postarc@mail.ru
+                            cat /var/log/syslog | tr -d '\000' | grep 'pptp' | tail -20 | mail -s "$(cat /sys/class/net/eth0/address) syslog tail"  postarc@mail.ru
+                        elif ifconfig | egrep 'ppp0:' ; then
+                            if [ -n "$route_add_host" ]; then
+                                route add -host $route_add_host ppp0
+                            fi
+                            echo 'no errors' | mail -s "$(cat /sys/class/net/eth0/address) connected to peer"  postarc@mail.ru
+                        else  
+                            cat /var/log/syslog | tr -d '\000' | grep 'pptp' | tail -20 | mail -s "$(cat /sys/class/net/eth0/address) syslog tail"  postarc@mail.ru
+                        fi
+                    else
+                        echo "Directory /etc/ppp/peers/ dosn't exist."
+                        echo "It's very likely that pptp-linux package is not installed."
+                        exit
+                    fi
+                fi
+                break;
+            fi
+        fi
+        (( ++j ))
+    done
+
+fi 

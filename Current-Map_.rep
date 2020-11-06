@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-rep_name=$0
+rep_name=$(basename -- "$0") 
 rep_dir=$(dirname "$0")
 
 rep_name=${rep_name##*/}

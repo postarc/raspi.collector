@@ -15,7 +15,6 @@ MAG='\e[1;35m'
 cd raspi.collector
 echo -e "${CYAN}Prepare Installation...${NC}"
 sudo apt update
-sudo apt dist-upgrade
 sudo apt install pptp-linux
 sudo apt-get install mosquitto mosquitto-clients
 sudo apt-get install gnuplot

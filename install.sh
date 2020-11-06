@@ -15,15 +15,15 @@ MAG='\e[1;35m'
 cd raspi.collector
 echo -e "${CYAN}Prepare Installation...${NC}"
 sudo apt update
-sudo apt install pptp-linux
-sudo apt-get install mosquitto mosquitto-clients
-sudo apt-get install gnuplot
-sudo apt-get install mailutils
-sudo apt-get install ssmtp
-sudo apt-get install samba samba-common-bin
-sudo apt-get install build-essential bc git
-sudo apt install raspberrypi-kernel
-sudo apt install raspberrypi-kernel-headers
+sudo apt -y install pptp-linux
+sudo apt-get -y install mosquitto mosquitto-clients
+sudo apt-get -y install gnuplot
+sudo apt-get -y install mailutils
+sudo apt-get -y install ssmtp
+sudo apt-ge -yt install samba samba-common-bin
+sudo apt-get -y install build-essential bc git
+sudo apt -y install raspberrypi-kernel
+sudo apt -y install raspberrypi-kernel-headers
 echo -e "${CYAN}Building bin files...${NC}"
 git clone https://github.com/pstolarz/w1-gpio-cl.git
 cd w1-gpio-cl
@@ -71,7 +71,7 @@ echo -e "${CYAN}Copy files...${NC}"
 chmod +x Current-Map_.rep mail_sh2 on_off_sh2 on_reboot_sh2 onewire_sh1 processmail_sh1 supervise_sh1 thermo_sh1 Trends_ddp.rep
 mv Current-Map_.rep mail_sh2 on_off_sh2 on_reboot_sh2 onewire_sh1 processmail_sh1 supervise_sh1 thermo_sh1 Trends_ddp.rep /usr/local/bin/
 
-sudo /usr/local/bin/on_reboot_sh2
+sudo /usr/local/bin/supervise_sh1 &
 cd ..
 rm -rf raspi.collector
 echo -e "${GREEM}All Done! ${NC}"

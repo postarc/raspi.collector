@@ -20,7 +20,7 @@ sudo apt-get -y install mosquitto mosquitto-clients
 sudo apt-get -y install gnuplot
 sudo apt-get -y install mailutils
 sudo apt-get -y install ssmtp
-sudo apt-ge -yt install samba samba-common-bin
+sudo apt-get -y install samba samba-common-bin
 sudo apt-get -y install build-essential bc git
 sudo apt -y install raspberrypi-kernel
 sudo apt -y install raspberrypi-kernel-headers

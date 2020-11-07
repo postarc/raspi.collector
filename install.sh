@@ -33,35 +33,35 @@ cd ..
 ###############################################
 #Create /etc/ssmtp/ssmtp.conf
 echo -e "${CYAN}Creating configuration...${NC}"
-sudo echo -e "root=$MAIL_ADDR" > /etc/ssmtp/ssmtp.conf
-sudo echo 'mailhub=smtp.mail.ru' >> /etc/ssmtp/ssmtp.conf
-sudo echo 'hostname=raspberry' >> /etc/ssmtp/ssmtp.conf
-sudo echo 'UseTLS=YES' >> /etc/ssmtp/ssmtp.conf
-sudo echo 'UseSTARTTLS=YES' >> /etc/ssmtp/ssmtp.conf
-sudo echo 'AuthMethod=LOGIN' >> /etc/ssmtp/ssmtp.conf
-sudo echo -e "AuthUser=$MAIL_ADDR" >> /etc/ssmtp/ssmtp.conf
-sudo echo -n -e "${YELLOW}Input mail password:${NC}"
+sudo sh -c "echo -e "root=$MAIL_ADDR" > /etc/ssmtp/ssmtp.conf"
+sudo sh -c "echo 'mailhub=smtp.mail.ru' >> /etc/ssmtp/ssmtp.conf"
+sudo sh -c "echo 'hostname=raspberry' >> /etc/ssmtp/ssmtp.conf"
+sudo sh -c "echo 'UseTLS=YES' >> /etc/ssmtp/ssmtp.conf"
+sudo sh -c "echo 'UseSTARTTLS=YES' >> /etc/ssmtp/ssmtp.conf"
+sudo sh -c "echo 'AuthMethod=LOGIN' >> /etc/ssmtp/ssmtp.conf"
+sudo sh -c "echo -e "AuthUser=$MAIL_ADDR" >> /etc/ssmtp/ssmtp.conf"
+echo -n -e "${YELLOW}Input mail password:${NC}"
 read PASSWD
-sudo echo -e "AuthPass=$PASSWD" >> /etc/ssmtp/ssmtp.conf    #a27TLxmqGdqgJ7N           
-sudo echo 'FromLineOverride=NO' >> /etc/ssmtp/ssmtp.conf
+sudo sh -c "echo -e "AuthPass=$PASSWD" >> /etc/ssmtp/ssmtp.conf"       
+sudo sh -c "echo 'FromLineOverride=NO' >> /etc/ssmtp/ssmtp.conf"
 ##################################################
 #Create /etc/ssmtp/revaliases
-sudo echo -e "root:$MAIL_ADDR" > /etc/ssmtp/revaliases
-sudo echo -e "pi:raspberry_pi@bk.ru" >> /etc/ssmtp/revaliases
+sudo sh -c "echo -e "root:$MAIL_ADDR" > /etc/ssmtp/revaliases"
+sudo sh -c "echo -e "pi:raspberry_pi@bk.ru" >> /etc/ssmtp/revaliases"
 ##################################################
 
 echo -e -n "${YELLOW}Input your workgroup name:${NC}"
 read WORKGROUP_N
-sed -i "s/.*workgroup =.*/workgroup = ${WORKGROUP_N}/" /etc/samba/smb.conf
+sudo sh -c "sed -i "s/.*workgroup =.*/workgroup = ${WORKGROUP_N}/" /etc/samba/smb.conf"
 
-sudo echo "[share_pi]" >> /etc/samba/smb.conf
-sudo echo " comment=Raspberry Pi Share" >> /etc/samba/smb.conf
-sudo echo " path=/home/pi/share" >> /etc/samba/smb.conf
-sudo echo " browseable=Yes" >> /etc/samba/smb.conf
-sudo echo " writeable=Yes" >> /etc/samba/smb.conf
-sudo echo " guest ok =Yes" >> /etc/samba/smb.conf
-sudo echo " create mask=0777" >> /etc/samba/smb.conf
-sudo echo " directory mask=0777" >> /etc/samba/smb.conf
+sudo sh -c "echo "[share_pi]" >> /etc/samba/smb.conf"
+sudo sh -c "echo " comment=Raspberry Pi Share" >> /etc/samba/smb.conf"
+sudo sh -c "echo " path=/home/pi/share" >> /etc/samba/smb.conf"
+sudo sh -c "echo " browseable=Yes" >> /etc/samba/smb.conf"
+sudo sh -c "echo " writeable=Yes" >> /etc/samba/smb.conf"
+sudo sh -c "echo " guest ok =Yes" >> /etc/samba/smb.conf"
+sudo sh -c "echo " create mask=0777" >> /etc/samba/smb.conf"
+sudo sh -c "echo " directory mask=0777" >> /etc/samba/smb.conf"
 sudo service smbd restart
 ####################################################
 MAC_ADDR=$(cat /sys/class/net/eth0/address)

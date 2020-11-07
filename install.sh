@@ -68,7 +68,6 @@ MAC_ADDR=$(cat /sys/class/net/eth0/address)
 sed -i "s/.*test_subj=.*/test_subj=\"mac=${MAC_ADDR};vpn=192.169.3.3\"/" processmail_sh1
 
 echo -e "${CYAN}Copy files...${NC}"
-cd raspi.collector
 chmod +x Current-Map_.rep mail_sh2 on_off_sh2 on_reboot_sh2 onewire_sh1 processmail_sh1 supervise_sh1 thermo_sh1 Trends_ddp.rep
 sudo mv Current-Map_.rep mail_sh2 on_off_sh2 on_reboot_sh2 onewire_sh1 processmail_sh1 supervise_sh1 thermo_sh1 Trends_ddp.rep /usr/local/bin/
 sudo /usr/local/bin/supervise_sh1 &

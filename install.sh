@@ -33,21 +33,21 @@ cd ..
 ###############################################
 #Create /etc/ssmtp/ssmtp.conf
 echo -e "${CYAN}Creating configuration...${NC}"
-sudo sh -c "echo -e "root=$MAIL_ADDR" > /etc/ssmtp/ssmtp.conf"
+sudo sh -c "echo "root=$MAIL_ADDR" > /etc/ssmtp/ssmtp.conf"
 sudo sh -c "echo 'mailhub=smtp.mail.ru' >> /etc/ssmtp/ssmtp.conf"
 sudo sh -c "echo 'hostname=raspberry' >> /etc/ssmtp/ssmtp.conf"
 sudo sh -c "echo 'UseTLS=YES' >> /etc/ssmtp/ssmtp.conf"
 sudo sh -c "echo 'UseSTARTTLS=YES' >> /etc/ssmtp/ssmtp.conf"
 sudo sh -c "echo 'AuthMethod=LOGIN' >> /etc/ssmtp/ssmtp.conf"
-sudo sh -c "echo -e "AuthUser=$MAIL_ADDR" >> /etc/ssmtp/ssmtp.conf"
+sudo sh -c "echo "AuthUser=$MAIL_ADDR" >> /etc/ssmtp/ssmtp.conf"
 echo -n -e "${YELLOW}Input mail password:${NC}"
 read PASSWD
-sudo sh -c "echo -e "AuthPass=$PASSWD" >> /etc/ssmtp/ssmtp.conf"       
+sudo sh -c "echo "AuthPass=$PASSWD" >> /etc/ssmtp/ssmtp.conf"       
 sudo sh -c "echo 'FromLineOverride=NO' >> /etc/ssmtp/ssmtp.conf"
 ##################################################
 #Create /etc/ssmtp/revaliases
-sudo sh -c "echo -e "root:$MAIL_ADDR" > /etc/ssmtp/revaliases"
-sudo sh -c "echo -e "pi:raspberry_pi@bk.ru" >> /etc/ssmtp/revaliases"
+sudo sh -c "echo "root:$MAIL_ADDR" > /etc/ssmtp/revaliases"
+sudo sh -c "echo "pi:raspberry_pi@bk.ru" >> /etc/ssmtp/revaliases"
 ##################################################
 
 echo -e -n "${YELLOW}Input your workgroup name:${NC}"

@@ -42,7 +42,7 @@ sudo sh -c "echo 'AuthMethod=LOGIN' >> /etc/ssmtp/ssmtp.conf"
 sudo sh -c "echo "AuthUser=$MAIL_ADDR" >> /etc/ssmtp/ssmtp.conf"
 echo -n -e "${YELLOW}Input mail password:${NC}"
 read PASSWD
-sudo sh -c "echo "AuthPass=$PASSWD" >> /etc/ssmtp/ssmtp.conf"       
+sudo sh -c "echo "AuthPass=$PASSWD" >> /etc/ssmtp/ssmtp.conf"
 sudo sh -c "echo 'FromLineOverride=NO' >> /etc/ssmtp/ssmtp.conf"
 ##################################################
 #Create /etc/ssmtp/revaliases
@@ -55,13 +55,13 @@ read WORKGROUP_N
 sudo sh -c "sed -i "s/.*workgroup =.*/workgroup = ${WORKGROUP_N}/" /etc/samba/smb.conf"
 
 sudo sh -c "echo "[share_pi]" >> /etc/samba/smb.conf"
-sudo sh -c "echo " comment=Raspberry Pi Share" >> /etc/samba/smb.conf"
-sudo sh -c "echo " path=/home/pi/share" >> /etc/samba/smb.conf"
-sudo sh -c "echo " browseable=Yes" >> /etc/samba/smb.conf"
-sudo sh -c "echo " writeable=Yes" >> /etc/samba/smb.conf"
-sudo sh -c "echo " guest ok =Yes" >> /etc/samba/smb.conf"
-sudo sh -c "echo " create mask=0777" >> /etc/samba/smb.conf"
-sudo sh -c "echo " directory mask=0777" >> /etc/samba/smb.conf"
+sudo sh -c "echo ' comment=Raspberry Pi Share' >> /etc/samba/smb.conf"
+sudo sh -c "echo ' path=/home/pi/share' >> /etc/samba/smb.conf"
+sudo sh -c "echo ' browseable=Yes' >> /etc/samba/smb.conf"
+sudo sh -c 'echo " writeable=Yes' >> /etc/samba/smb.conf"
+sudo sh -c 'echo " guest ok =Yes' >> /etc/samba/smb.conf"
+sudo sh -c 'echo " create mask=0777' >> /etc/samba/smb.conf"
+sudo sh -c 'echo " directory mask=0777' >> /etc/samba/smb.conf"
 sudo service smbd restart
 ####################################################
 MAC_ADDR=$(cat /sys/class/net/eth0/address)

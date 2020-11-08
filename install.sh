@@ -58,10 +58,10 @@ sudo sh -c "echo "[share_pi]" >> /etc/samba/smb.conf"
 sudo sh -c "echo ' comment=Raspberry Pi Share' >> /etc/samba/smb.conf"
 sudo sh -c "echo ' path=/home/pi/share' >> /etc/samba/smb.conf"
 sudo sh -c "echo ' browseable=Yes' >> /etc/samba/smb.conf"
-sudo sh -c 'echo " writeable=Yes' >> /etc/samba/smb.conf"
-sudo sh -c 'echo " guest ok =Yes' >> /etc/samba/smb.conf"
-sudo sh -c 'echo " create mask=0777' >> /etc/samba/smb.conf"
-sudo sh -c 'echo " directory mask=0777' >> /etc/samba/smb.conf"
+sudo sh -c "echo ' writeable=Yes' >> /etc/samba/smb.conf"
+sudo sh -c "echo ' guest ok =Yes' >> /etc/samba/smb.conf"
+sudo sh -c "echo ' create mask=0777' >> /etc/samba/smb.conf"
+sudo sh -c "echo ' directory mask=0777' >> /etc/samba/smb.conf"
 sudo service smbd restart
 ####################################################
 MAC_ADDR=$(cat /sys/class/net/eth0/address)
